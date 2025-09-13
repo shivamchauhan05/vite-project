@@ -1,18 +1,21 @@
 // pages/Invoices.js
-import React, { useState } from 'react';
-import { FiPlus, FiFilter, FiDownload, FiPrinter, FiSearch, FiEye, FiEdit, FiTrash2,FiFileText ,FiDollarSign } from 'react-icons/fi';
+import React, { useState, useEffect } from 'react';
+import { FiPlus, FiFilter, FiDownload, FiPrinter, FiSearch, FiEye, FiEdit, FiTrash2 ,FiFileText,FiDollarSign} from 'react-icons/fi';
+import { invoicesAPI } from '../services/api';
 
 const Invoices = () => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-
-  const invoiceData = {
-    totalInvoices: 245,
-    paid: 189,
-    pending: 45,
-    overdue: 11,
-    totalAmount: 1256400
-  };
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({
+    totalInvoices: 0,
+    paid: 0,
+    pending: 0,
+    overdue: 0,
+    totalAmount: 0
+  });
 
   const filters = [
     { id: 'all', label: 'All Invoices' },
@@ -21,94 +24,87 @@ const Invoices = () => {
     { id: 'overdue', label: 'Overdue' }
   ];
 
-  const invoices = [
-    { 
-      id: 'INV-001', 
-      customer: 'Rajesh Traders', 
-      date: '10 Nov 2023', 
-      dueDate: '20 Nov 2023',
-      amount: 12500,
-      status: 'Paid'
-    },
-    { 
-      id: 'INV-002', 
-      customer: 'Mohan Stores', 
-      date: '9 Nov 2023', 
-      dueDate: '19 Nov 2023',
-      amount: 9200,
-      status: 'Pending'
-    },
-    { 
-      id: 'INV-003', 
-      customer: 'Sanjay Enterprises', 
-      date: '8 Nov 2023', 
-      dueDate: '18 Nov 2023',
-      amount: 7500,
-      status: 'Pending'
-    },
-    { 
-      id: 'INV-004', 
-      customer: 'RK Suppliers', 
-      date: '7 Nov 2023', 
-      dueDate: '17 Nov 2023',
-      amount: 15600,
-      status: 'Paid'
-    },
-    { 
-      id: 'INV-005', 
-      customer: 'Global Electronics', 
-      date: '6 Nov 2023', 
-      dueDate: '16 Nov 2023',
-      amount: 13400,
-      status: 'Overdue'
-    },
-    { 
-      id: 'INV-006', 
-      customer: 'Tech Gadgets Inc.', 
-      date: '5 Nov 2023', 
-      dueDate: '15 Nov 2023',
-      amount: 9800,
-      status: 'Paid'
-    },
-    { 
-      id: 'INV-007', 
-      customer: 'Prime Retailers', 
-      date: '4 Nov 2023', 
-      dueDate: '14 Nov 2023',
-      amount: 11200,
-      status: 'Pending'
-    },
-    { 
-      id: 'INV-008', 
-      customer: 'Elite Solutions', 
-      date: '3 Nov 2023', 
-      dueDate: '13 Nov 2023',
-      amount: 8700,
-      status: 'Paid'
+  useEffect(() => {
+    fetchInvoices();
+    fetchInvoiceStats();
+  }, []);
+
+  const fetchInvoices = async () => {
+    try {
+      const response = await invoicesAPI.getAll();
+      setInvoices(response.data.invoices || response.data);
+    } catch (err) {
+      setError('Failed to load invoices');
+      console.error('Invoices fetch error:', err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const fetchInvoiceStats = async () => {
+    try {
+      const response = await invoicesAPI.getStats();
+      setStats({
+        totalInvoices: response.data.totalInvoices || 0,
+        paid: response.data.paidInvoices || 0,
+        pending: response.data.pendingInvoices || 0,
+        overdue: response.data.overdueInvoices || 0,
+        totalAmount: response.data.totalRevenue || 0
+      });
+    } catch (err) {
+      console.error('Failed to load invoice stats:', err);
+    }
+  };
+
+  const handleDeleteInvoice = async (id) => {
+    if (window.confirm('Are you sure you want to delete this invoice?')) {
+      try {
+        await invoicesAPI.delete(id);
+        setInvoices(invoices.filter(invoice => invoice.id !== id));
+      } catch (err) {
+        setError('Failed to delete invoice');
+        console.error('Delete invoice error:', err);
+      }
+    }
+  };
+
+  const handleUpdateStatus = async (id, status) => {
+    try {
+      await invoicesAPI.updateStatus(id, status);
+      // Update local state
+      setInvoices(invoices.map(invoice => 
+        invoice.id === id ? {...invoice, status} : invoice
+      ));
+    } catch (err) {
+      setError('Failed to update invoice status');
+      console.error('Update invoice status error:', err);
+    }
+  };
 
   const statusClass = (status) => {
     switch (status) {
-      case 'Paid': return 'bg-green-100 text-green-800';
-      case 'Pending': return 'bg-yellow-100 text-yellow-800';
-      case 'Overdue': return 'bg-red-100 text-red-800';
+      case 'paid': return 'bg-green-100 text-green-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'overdue': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const filteredInvoices = invoices.filter(invoice => {
     // Filter by status
-    if (activeFilter === 'paid' && invoice.status !== 'Paid') return false;
-    if (activeFilter === 'pending' && invoice.status !== 'Pending') return false;
-    if (activeFilter === 'overdue' && invoice.status !== 'Overdue') return false;
+    if (activeFilter === 'paid' && invoice.status !== 'paid') return false;
+    if (activeFilter === 'pending' && invoice.status !== 'pending') return false;
+    if (activeFilter === 'overdue' && invoice.status !== 'overdue') return false;
     
     // Filter by search query
-    if (searchQuery && !invoice.customer.toLowerCase().includes(searchQuery.toLowerCase()) && 
-        !invoice.id.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery && !invoice.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) && 
+        !invoice.invoice_number.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     
     return true;
   });
+
+  if (loading) return <div className="p-6">Loading invoices...</div>;
+  if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
     <div className="p-6">
@@ -123,7 +119,7 @@ const Invoices = () => {
             <FiPrinter className="mr-2" />
             Print
           </button>
-          <button className="flex items-center px-4 py-2 bg-primary border border-transparent rounded-md text-white hover:bg-secondary  bg-blue-600">
+          <button className="flex items-center px-4 py-2 bg-primary border border-transparent rounded-md text-white hover:bg-secondary">
             <FiPlus className="mr-2" />
             Create Invoice
           </button>
@@ -136,7 +132,7 @@ const Invoices = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Invoices</p>
-              <p className="text-2xl font-bold text-gray-900">{invoiceData.totalInvoices}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalInvoices}</p>
             </div>
             <div className="bg-blue-100 p-3 rounded-full">
               <FiFileText className="h-6 w-6 text-blue-500" />
@@ -151,7 +147,7 @@ const Invoices = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Paid Invoices</p>
-              <p className="text-2xl font-bold text-gray-900">{invoiceData.paid}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.paid}</p>
             </div>
             <div className="bg-green-100 p-3 rounded-full">
               <FiFileText className="h-6 w-6 text-green-500" />
@@ -166,7 +162,7 @@ const Invoices = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Pending Invoices</p>
-              <p className="text-2xl font-bold text-gray-900">{invoiceData.pending}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.pending}</p>
             </div>
             <div className="bg-yellow-100 p-3 rounded-full">
               <FiFileText className="h-6 w-6 text-yellow-500" />
@@ -181,7 +177,7 @@ const Invoices = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Amount</p>
-              <p className="text-2xl font-bold text-gray-900">₹{invoiceData.totalAmount.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">₹{stats.totalAmount.toLocaleString()}</p>
             </div>
             <div className="bg-purple-100 p-3 rounded-full">
               <FiDollarSign className="h-6 w-6 text-purple-500" />
@@ -242,11 +238,15 @@ const Invoices = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredInvoices.map((invoice) => (
                 <tr key={invoice.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{invoice.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{invoice.customer}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{invoice.date}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{invoice.dueDate}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₹{invoice.amount.toLocaleString()}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{invoice.invoice_number}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{invoice.customer_name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {new Date(invoice.date).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₹{invoice.total_amount.toLocaleString()}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass(invoice.status)}`}>
                       {invoice.status}
@@ -259,7 +259,10 @@ const Invoices = () => {
                     <button className="text-primary hover:text-secondary mr-3">
                       <FiEdit className="inline mr-1" /> Edit
                     </button>
-                    <button className="text-red-600 hover:text-red-900">
+                    <button 
+                      className="text-red-600 hover:text-red-900"
+                      onClick={() => handleDeleteInvoice(invoice.id)}
+                    >
                       <FiTrash2 className="inline mr-1" /> Delete
                     </button>
                   </td>

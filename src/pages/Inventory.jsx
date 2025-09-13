@@ -1,19 +1,20 @@
 // pages/Inventory.js
-import React, { useState } from 'react';
-import { FiPlus, FiFilter, FiDownload, FiPrinter, FiSearch, FiEdit, FiTrash2,FiPackage,FiDollarSign, } from 'react-icons/fi';
-import LowStockAlert from '../components/LowStockAlert';
-import InventoryChart from '../components/InventoryChart';
+import React, { useState, useEffect } from 'react';
+import { FiPlus, FiFilter, FiDownload, FiPrinter, FiSearch, FiEdit, FiTrash2, FiPackage, FiAlertTriangle,FiDollarSign } from 'react-icons/fi';
+import { inventoryAPI } from '../services/api';
 
 const Inventory = () => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-
-  const inventoryData = {
-    totalProducts: 145,
-    outOfStock: 7,
-    lowStock: 12,
-    totalValue: 2456800
-  };
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({
+    totalProducts: 0,
+    outOfStock: 0,
+    lowStock: 0,
+    totalValue: 0
+  });
 
   const filters = [
     { id: 'all', label: 'All Products' },
@@ -26,31 +27,79 @@ const Inventory = () => {
     'Electronics', 'Clothing', 'Food', 'Books', 'Furniture', 'Sports'
   ];
 
-  const products = [
-    { id: 'P001', name: 'Smartphone X', category: 'Electronics', stock: 45, price: 24999, cost: 18500, status: 'In Stock' },
-    { id: 'P002', name: 'Wireless Earbuds', category: 'Electronics', stock: 3, price: 4999, cost: 3200, status: 'Low Stock' },
-    { id: 'P003', name: 'Laptop Pro', category: 'Electronics', stock: 12, price: 89999, cost: 72000, status: 'In Stock' },
-    { id: 'P004', name: 'Cotton T-Shirt', category: 'Clothing', stock: 0, price: 899, cost: 450, status: 'Out of Stock' },
-    { id: 'P005', name: 'Jeans', category: 'Clothing', stock: 28, price: 1599, cost: 900, status: 'In Stock' },
-    { id: 'P006', name: 'Coffee Beans', category: 'Food', stock: 5, price: 499, cost: 300, status: 'Low Stock' },
-    { id: 'P007', name: 'Desk Lamp', category: 'Furniture', stock: 15, price: 1299, cost: 800, status: 'In Stock' },
-    { id: 'P008', name: 'Yoga Mat', category: 'Sports', stock: 0, price: 899, cost: 500, status: 'Out of Stock' }
-  ];
+  useEffect(() => {
+    fetchProducts();
+    fetchInventoryStats();
+  }, []);
 
-  const statusClass = (status) => {
-    switch (status) {
-      case 'In Stock': return 'bg-green-100 text-green-800';
-      case 'Low Stock': return 'bg-yellow-100 text-yellow-800';
-      case 'Out of Stock': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const fetchProducts = async () => {
+    try {
+      const response = await inventoryAPI.getAll();
+      setProducts(response.data.products || response.data);
+    } catch (err) {
+      setError('Failed to load products');
+      console.error('Products fetch error:', err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const fetchInventoryStats = async () => {
+    try {
+      const response = await inventoryAPI.getStats();
+      setStats({
+        totalProducts: response.data.totalProducts || 0,
+        outOfStock: response.data.outOfStockItems || 0,
+        lowStock: response.data.lowStockItems || 0,
+        totalValue: response.data.totalInventoryValue || 0
+      });
+    } catch (err) {
+      console.error('Failed to load inventory stats:', err);
+    }
+  };
+
+  const handleDeleteProduct = async (id) => {
+    if (window.confirm('Are you sure you want to delete this product?')) {
+      try {
+        await inventoryAPI.delete(id);
+        setProducts(products.filter(product => product.id !== id));
+      } catch (err) {
+        setError('Failed to delete product');
+        console.error('Delete product error:', err);
+      }
+    }
+  };
+
+  const handleUpdateStock = async (id, newStock) => {
+    try {
+      await inventoryAPI.updateStock(id, { stock: newStock });
+      // Update local state
+      setProducts(products.map(product => 
+        product.id === id ? {...product, stock: newStock} : product
+      ));
+    } catch (err) {
+      setError('Failed to update stock');
+      console.error('Update stock error:', err);
+    }
+  };
+
+  const statusClass = (stock, minStock) => {
+    if (stock === 0) return 'bg-red-100 text-red-800';
+    if (stock <= minStock) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-green-100 text-green-800';
+  };
+
+  const statusText = (stock, minStock) => {
+    if (stock === 0) return 'Out of Stock';
+    if (stock <= minStock) return 'Low Stock';
+    return 'In Stock';
   };
 
   const filteredProducts = products.filter(product => {
     // Filter by status
-    if (activeFilter === 'instock' && product.status !== 'In Stock') return false;
-    if (activeFilter === 'lowstock' && product.status !== 'Low Stock') return false;
-    if (activeFilter === 'outofstock' && product.status !== 'Out of Stock') return false;
+    if (activeFilter === 'instock' && (product.stock === 0 || product.stock <= product.min_stock)) return false;
+    if (activeFilter === 'lowstock' && (product.stock === 0 || product.stock > product.min_stock)) return false;
+    if (activeFilter === 'outofstock' && product.stock !== 0) return false;
     
     // Filter by search query
     if (searchQuery && !product.name.toLowerCase().includes(searchQuery.toLowerCase()) && 
@@ -59,8 +108,11 @@ const Inventory = () => {
     return true;
   });
 
+  if (loading) return <div className="p-6">Loading inventory...</div>;
+  if (error) return <div className="p-6 text-red-500">{error}</div>;
+
   return (
-    <div>
+    <div className="p-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Inventory Management</h1>
         <div className="flex items-center space-x-2 mt-4 md:mt-0">
@@ -72,7 +124,7 @@ const Inventory = () => {
             <FiPrinter className="mr-2" />
             Print
           </button>
-          <button className="flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md text-white hover:bg-blue-700">
+          <button className="flex items-center px-4 py-2 bg-primary border border-transparent rounded-md text-white hover:bg-secondary">
             <FiPlus className="mr-2" />
             Add Product
           </button>
@@ -85,7 +137,7 @@ const Inventory = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Products</p>
-              <p className="text-2xl font-bold text-gray-900">{inventoryData.totalProducts}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalProducts}</p>
             </div>
             <div className="bg-blue-100 p-3 rounded-full">
               <FiPackage className="h-6 w-6 text-blue-500" />
@@ -100,7 +152,7 @@ const Inventory = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Out of Stock</p>
-              <p className="text-2xl font-bold text-gray-900">{inventoryData.outOfStock}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.outOfStock}</p>
             </div>
             <div className="bg-red-100 p-3 rounded-full">
               <FiPackage className="h-6 w-6 text-red-500" />
@@ -115,7 +167,7 @@ const Inventory = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Low Stock</p>
-              <p className="text-2xl font-bold text-gray-900">{inventoryData.lowStock}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.lowStock}</p>
             </div>
             <div className="bg-yellow-100 p-3 rounded-full">
               <FiPackage className="h-6 w-6 text-yellow-500" />
@@ -130,7 +182,7 @@ const Inventory = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Value</p>
-              <p className="text-2xl font-bold text-gray-900">₹{inventoryData.totalValue.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">₹{stats.totalValue.toLocaleString()}</p>
             </div>
             <div className="bg-green-100 p-3 rounded-full">
               <FiDollarSign className="h-6 w-6 text-green-500" />
@@ -142,16 +194,6 @@ const Inventory = () => {
         </div>
       </div>
 
-      {/* Charts and Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <div className="lg:col-span-2">
-          <InventoryChart />
-        </div>
-        <div>
-          <LowStockAlert />
-        </div>
-      </div>
-
       {/* Filters and Search */}
       <div className="bg-white rounded-lg shadow mb-6">
         <div className="p-4 border-b border-gray-200">
@@ -160,7 +202,7 @@ const Inventory = () => {
               {filters.map(filter => (
                 <button
                   key={filter.id}
-                  className={`px-4 py-2 rounded-md text-sm font-medium ${activeFilter === filter.id ? 'bg-blue-100 text-blue-800' : 'text-gray-600 hover:bg-gray-100'}`}
+                  className={`px-4 py-2 rounded-md text-sm font-medium ${activeFilter === filter.id ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'}`}
                   onClick={() => setActiveFilter(filter.id)}
                 >
                   {filter.label}
@@ -181,7 +223,7 @@ const Inventory = () => {
                 <input
                   type="text"
                   placeholder="Search products..."
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -211,19 +253,30 @@ const Inventory = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.id}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.name}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.category}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.stock}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <input
+                      type="number"
+                      min="0"
+                      className="w-20 px-2 py-1 border border-gray-300 rounded-md text-sm"
+                      value={product.stock}
+                      onChange={(e) => handleUpdateStock(product.id, parseInt(e.target.value))}
+                    />
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₹{product.price.toLocaleString()}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₹{product.cost.toLocaleString()}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₹{product.cost?.toLocaleString() || '0'}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass(product.status)}`}>
-                      {product.status}
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass(product.stock, product.min_stock)}`}>
+                      {statusText(product.stock, product.min_stock)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button className="text-blue-600 hover:text-blue-900 mr-3">
+                    <button className="text-primary hover:text-secondary mr-3">
                       <FiEdit className="inline mr-1" /> Edit
                     </button>
-                    <button className="text-red-600 hover:text-red-900">
+                    <button 
+                      className="text-red-600 hover:text-red-900"
+                      onClick={() => handleDeleteProduct(product.id)}
+                    >
                       <FiTrash2 className="inline mr-1" /> Delete
                     </button>
                   </td>

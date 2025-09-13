@@ -1,53 +1,106 @@
-// pages/Dashboard.js (Updated)
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { FiTrendingUp, FiTrendingDown, FiShoppingCart, FiUsers } from 'react-icons/fi';
 import StatCard from '../components/StatCard';
 import RecentTransactions from '../components/RecentTransactions';
 import InventoryAlerts from '../components/InventoryAlerts';
 import RevenueChart from '../components/RevenueChart';
 import SalesMap from '../components/SalesMap';
+import { reportsAPI, invoicesAPI } from '../services/api';
 
 const Dashboard = () => {
-  const businessData = {
-    revenue: { current: 125640, target: 150000, growth: 12.5 },
-    expenses: { current: 45680, budget: 50000, growth: -3.2 },
-    profit: { current: 79960, target: 100000, growth: 8.7 },
-    customers: { current: 1245, target: 1500, growth: 5.2 }
-  };
+  const [dashboardData, setDashboardData] = useState({
+    revenue: { current: 0, target: 150000, growth: 0 },
+    expenses: { current: 0, budget: 50000, growth: 0 },
+    profit: { current: 0, target: 100000, growth: 0 },
+    customers: { current: 0, target: 1500, growth: 0 }
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch dashboard overview data
+        const response = await reportsAPI.getDashboardOverview();
+        const data = response.data;
+        
+        // Calculate growth percentages (you might want to store previous values in your database)
+        const revenueGrowth = data.revenue > 0 ? 12.5 : 0; // Example growth calculation
+        const expenseGrowth = data.expenses > 0 ? -3.2 : 0; // Example growth calculation
+        
+        // Update dashboard data
+        setDashboardData({
+          revenue: { 
+            current: data.revenue, 
+            target: 150000, 
+            growth: revenueGrowth
+          },
+          expenses: { 
+            current: data.expenses, 
+            budget: 50000, 
+            growth: expenseGrowth
+          },
+          profit: { 
+            current: data.revenue - data.expenses, 
+            target: 100000, 
+            growth: 8.7 // Example growth
+          },
+          customers: { 
+            current: data.customers || 0, 
+            target: 1500, 
+            growth: 5.2 // Example growth
+          }
+        });
+
+      } catch (err) {
+        setError('Failed to load dashboard data');
+        console.error('Dashboard data error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  if (loading) return <div className="p-6">Loading dashboard...</div>;
+  if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
-    <div>
+    <div className="p-6">
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Business Dashboard</h1>
       
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatCard
           title="Revenue"
-          value={`₹${businessData.revenue.current.toLocaleString()}`}
-          change={businessData.revenue.growth}
+          value={`₹${dashboardData.revenue.current.toLocaleString()}`}
+          change={dashboardData.revenue.growth}
           icon={<FiTrendingUp className="h-6 w-6 text-green-500" />}
-          target={`Target: ₹${businessData.revenue.target.toLocaleString()}`}
+          target={`Target: ₹${dashboardData.revenue.target.toLocaleString()}`}
         />
         <StatCard
           title="Expenses"
-          value={`₹${businessData.expenses.current.toLocaleString()}`}
-          change={businessData.expenses.growth}
+          value={`₹${dashboardData.expenses.current.toLocaleString()}`}
+          change={dashboardData.expenses.growth}
           icon={<FiTrendingDown className="h-6 w-6 text-red-500" />}
-          target={`Budget: ₹${businessData.expenses.budget.toLocaleString()}`}
+          target={`Budget: ₹${dashboardData.expenses.budget.toLocaleString()}`}
         />
         <StatCard
           title="Profit"
-          value={`₹${businessData.profit.current.toLocaleString()}`}
-          change={businessData.profit.growth}
+          value={`₹${dashboardData.profit.current.toLocaleString()}`}
+          change={dashboardData.profit.growth}
           icon={<FiTrendingUp className="h-6 w-6 text-green-500" />}
-          target={`Target: ₹${businessData.profit.target.toLocaleString()}`}
+          target={`Target: ₹${dashboardData.profit.target.toLocaleString()}`}
         />
         <StatCard
           title="Customers"
-          value={businessData.customers.current.toLocaleString()}
-          change={businessData.customers.growth}
+          value={dashboardData.customers.current.toLocaleString()}
+          change={dashboardData.customers.growth}
           icon={<FiUsers className="h-6 w-6 text-blue-500" />}
-          target={`Goal: ${businessData.customers.target.toLocaleString()}`}
+          target={`Goal: ${dashboardData.customers.target.toLocaleString()}`}
         />
       </div>
       

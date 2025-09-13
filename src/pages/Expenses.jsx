@@ -1,17 +1,20 @@
 // pages/Expenses.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FiPlus, FiFilter, FiDownload, FiPrinter, FiSearch, FiEdit, FiTrash2, FiDollarSign } from 'react-icons/fi';
+import { expensesAPI } from '../services/api';
 
 const Expenses = () => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-
-  const expenseData = {
-    totalExpenses: 45680,
-    thisMonth: 12500,
-    lastMonth: 10800,
+  const [expenses, setExpenses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({
+    totalExpenses: 0,
+    thisMonth: 0,
+    lastMonth: 0,
     budget: 50000
-  };
+  });
 
   const filters = [
     { id: 'all', label: 'All Expenses' },
@@ -24,72 +27,47 @@ const Expenses = () => {
     'Office Supplies', 'Utilities', 'Rent', 'Salaries', 'Marketing', 'Travel', 'Equipment'
   ];
 
-  const expenses = [
-    { 
-      id: 'EXP-001', 
-      category: 'Office Supplies', 
-      description: 'Printer paper and stationery', 
-      date: '10 Nov 2023',
-      amount: 2500,
-      paymentMethod: 'Credit Card'
-    },
-    { 
-      id: 'EXP-002', 
-      category: 'Utilities', 
-      description: 'Internet bill', 
-      date: '9 Nov 2023',
-      amount: 2200,
-      paymentMethod: 'Bank Transfer'
-    },
-    { 
-      id: 'EXP-003', 
-      category: 'Rent', 
-      description: 'Office rent', 
-      date: '5 Nov 2023',
-      amount: 15000,
-      paymentMethod: 'Cheque'
-    },
-    { 
-      id: 'EXP-004', 
-      category: 'Marketing', 
-      description: 'Facebook ads campaign', 
-      date: '3 Nov 2023',
-      amount: 5000,
-      paymentMethod: 'Credit Card'
-    },
-    { 
-      id: 'EXP-005', 
-      category: 'Salaries', 
-      description: 'Staff salaries', 
-      date: '1 Nov 2023',
-      amount: 35000,
-      paymentMethod: 'Bank Transfer'
-    },
-    { 
-      id: 'EXP-006', 
-      category: 'Equipment', 
-      description: 'New computer', 
-      date: '28 Oct 2023',
-      amount: 45000,
-      paymentMethod: 'Credit Card'
-    },
-    { 
-      id: 'EXP-007', 
-      category: 'Travel', 
-      description: 'Client meeting travel', 
-      date: '25 Oct 2023',
-      amount: 3200,
-      paymentMethod: 'Cash'
-    },
-    { 
-      id: 'EXP-008', 
-      category: 'Office Supplies', 
-      description: 'Coffee and snacks', 
-      date: '20 Oct 2023',
-      amount: 1500,
-      paymentMethod: 'Cash'
+  useEffect(() => {
+    fetchExpenses();
+    fetchExpenseStats();
+  }, []);
+
+  const fetchExpenses = async () => {
+    try {
+      const response = await expensesAPI.getAll();
+      setExpenses(response.data.expenses || response.data);
+    } catch (err) {
+      setError('Failed to load expenses');
+      console.error('Expenses fetch error:', err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const fetchExpenseStats = async () => {
+    try {
+      const response = await expensesAPI.getStats();
+      setStats(prev => ({
+        ...prev,
+        totalExpenses: response.data.totalExpenses || 0,
+        thisMonth: response.data.totalExpenses || 0 // You might need to adjust this based on your API
+      }));
+    } catch (err) {
+      console.error('Failed to load expense stats:', err);
+    }
+  };
+
+  const handleDeleteExpense = async (id) => {
+    if (window.confirm('Are you sure you want to delete this expense?')) {
+      try {
+        await expensesAPI.delete(id);
+        setExpenses(expenses.filter(expense => expense.id !== id));
+      } catch (err) {
+        setError('Failed to delete expense');
+        console.error('Delete expense error:', err);
+      }
+    }
+  };
 
   const filteredExpenses = expenses.filter(expense => {
     // Filter by search query
@@ -98,6 +76,9 @@ const Expenses = () => {
     
     return true;
   });
+
+  if (loading) return <div className="p-6">Loading expenses...</div>;
+  if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
     <div className="p-6">
@@ -112,7 +93,7 @@ const Expenses = () => {
             <FiPrinter className="mr-2" />
             Print
           </button>
-          <button className="flex items-center px-4 py-2 bg-primary border border-transparent rounded-md text-white hover:bg-secondary  bg-blue-600">
+          <button className="flex items-center px-4 py-2 bg-primary border border-transparent rounded-md text-white hover:bg-secondary">
             <FiPlus className="mr-2" />
             Add Expense
           </button>
@@ -125,7 +106,7 @@ const Expenses = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Expenses</p>
-              <p className="text-2xl font-bold text-gray-900">₹{expenseData.totalExpenses.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">₹{stats.totalExpenses.toLocaleString()}</p>
             </div>
             <div className="bg-red-100 p-3 rounded-full">
               <FiDollarSign className="h-6 w-6 text-red-500" />
@@ -140,7 +121,7 @@ const Expenses = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">This Month</p>
-              <p className="text-2xl font-bold text-gray-900">₹{expenseData.thisMonth.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">₹{stats.thisMonth.toLocaleString()}</p>
             </div>
             <div className="bg-blue-100 p-3 rounded-full">
               <FiDollarSign className="h-6 w-6 text-blue-500" />
@@ -161,7 +142,7 @@ const Expenses = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Last Month</p>
-              <p className="text-2xl font-bold text-gray-900">₹{expenseData.lastMonth.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">₹{stats.lastMonth.toLocaleString()}</p>
             </div>
             <div className="bg-green-100 p-3 rounded-full">
               <FiDollarSign className="h-6 w-6 text-green-500" />
@@ -176,7 +157,7 @@ const Expenses = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Monthly Budget</p>
-              <p className="text-2xl font-bold text-gray-900">₹{expenseData.budget.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">₹{stats.budget.toLocaleString()}</p>
             </div>
             <div className="bg-purple-100 p-3 rounded-full">
               <FiDollarSign className="h-6 w-6 text-purple-500" />
@@ -252,14 +233,19 @@ const Expenses = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{expense.id}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{expense.category}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{expense.description}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{expense.date}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{expense.paymentMethod}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {new Date(expense.date).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{expense.payment_method}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600">₹{expense.amount.toLocaleString()}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button className="text-primary hover:text-secondary mr-3">
                       <FiEdit className="inline mr-1" /> Edit
                     </button>
-                    <button className="text-red-600 hover:text-red-900">
+                    <button 
+                      className="text-red-600 hover:text-red-900"
+                      onClick={() => handleDeleteExpense(expense.id)}
+                    >
                       <FiTrash2 className="inline mr-1" /> Delete
                     </button>
                   </td>
